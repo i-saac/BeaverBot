@@ -14,19 +14,19 @@ reddit_user_agent = 'Sample User Agent'
 status = discord.ActivityType.watching
 status_message = 'for Error Reports'
 
-auto_responses = {'sample prompt':['sample response 1',
-                                   'sample response 2']
+auto_responses = {'sample prompt': ['sample response 1',
+                                    'sample response 2']
                   }
 
 faq_guild_ids = [YOUR_GUILD_ID_HERE]
-faq = {r'REGEX_STRING_HERE':'''FAQ RESPONSE HERE'''
+faq = {r'REGEX_STRING_HERE': '''FAQ RESPONSE HERE'''
        }
 
 uplink_guild_ids = [YOUR_GUILD_ID_HERE]
 uplink_channel_name = 'info-updates'
 uplink_subreddits = ['SUBREDDIT1', 'SUBREDDIT2']
 
-xp_cooldown = 10
+xp_cooldown = 10  # seconds
 max_xp_per_message = 25
 
 levels_with_roles = [5, 10, 20]

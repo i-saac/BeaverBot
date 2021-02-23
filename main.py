@@ -1,4 +1,3 @@
-import os
 import re
 import asyncpraw
 import discord
@@ -11,21 +10,25 @@ from asyncprawcore.exceptions import RequestException, ServerError
 from random import choice
 import config
 
+# Allow for bot to get members by id in order to assign roles
 intents = discord.Intents.default()
 intents.members = True
 
+# Initialize bot instance
 client = commands.Bot(command_prefix=config.command_prefix, intents=intents)
 
+# Initialize reddit instance
 if config.do_reddit:
     reddit = asyncpraw.Reddit(client_id=config.reddit_client,
                               client_secret=config.reddit_secret,
                               user_agent=config.reddit_user_agent)
 
+# Initialize sql connection and cursor
 conn = sqlite3.connect('botdata.db')
-
 cursor = conn.cursor()
 
 
+# Function to retrieve xp by user and guild id
 def get_xp(guild_id, user_id):
     cursor.execute("SELECT exp FROM experiencelevels WHERE guildid=:guildid AND userid=:userid",
                    {'guildid': guild_id, 'userid': user_id})
@@ -37,6 +40,7 @@ def get_xp(guild_id, user_id):
     return exp
 
 
+# Function to retrieve level by user and guild id
 def get_level(guild_id, user_id):
     cursor.execute("SELECT level FROM experiencelevels WHERE guildid=:guildid AND userid=:userid",
                    {'guildid': guild_id, 'userid': user_id})
@@ -48,6 +52,7 @@ def get_level(guild_id, user_id):
     return level
 
 
+# Function to retrieve last time user gained xp by user and guild id
 def get_lasttime(guild_id, user_id):
     cursor.execute("SELECT lasttime FROM experiencelevels WHERE guildid=:guildid AND userid=:userid",
                    {'guildid': guild_id, 'userid': user_id})
@@ -59,8 +64,9 @@ def get_lasttime(guild_id, user_id):
     return lasttime
 
 
+# Subreddit uplink task
 async def subs_uplink():
-    guilds = [get(client.guilds, id=id) for id in config.uplink_guild_ids]
+    guilds = [get(client.guilds, id=guild_id) for guild_id in config.uplink_guild_ids]
     channels = [get(guild.text_channels, name=config.uplink_channel_name) for guild in guilds]
     while True:
         try:
@@ -71,11 +77,13 @@ async def subs_uplink():
                         await channel.send(f'New post from reddit, go check it out! {submission.url}')
                     except AttributeError:
                         await guilds[index].create_text_channel(config.uplink_channel_name)
-                        channels[index] = get(guilds[index].text_channels, name=config.uplink_channel_name) 
+                        channels[index] = get(guilds[index].text_channels, name=config.uplink_channel_name)
+                        await channels[index].send(f'New post from reddit, go check it out! {submission.url}')
         except (asyncio.TimeoutError, RequestException, ServerError):
             continue
 
 
+# Things to do when the bot comes online
 @client.event
 async def on_ready():
     await client.change_presence(activity=discord.Activity(type=config.status,
@@ -86,6 +94,7 @@ async def on_ready():
         print('Subreddit Uplink Established')
 
 
+# Things to do whenever there is a message
 @client.event
 async def on_message(message):
     if not message.author.bot:
@@ -166,6 +175,7 @@ async def on_message(message):
         await client.process_commands(message)
 
 
+# Things to do when a command throws an error
 @client.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
@@ -175,7 +185,8 @@ async def on_command_error(ctx, error):
     else:
         raise error
     
-    
+
+# Debug cog
 class Debug(commands.Cog):
     """Developer/Latency Commands"""
     
@@ -189,6 +200,7 @@ class Debug(commands.Cog):
         await ctx.send(f'{ctx.author.mention} Pong! {round(self.client.latency * 1000)}ms')
 
 
+# Experience cog
 class Exp(commands.Cog):
     """Experience Related Commands"""
     
@@ -242,6 +254,7 @@ class Exp(commands.Cog):
         await ctx.send(string_to_send)
             
 
+# Memes cog (only active when config.do_reddit=True)
 class Memes(commands.Cog):
     """Meme Commands"""
     
@@ -272,9 +285,11 @@ class Memes(commands.Cog):
             await ctx.send('I\'m sorry, reddit integration seems to be disabled. Please contact your bot operator.')
 
 
+# Enable cogs
 client.add_cog(Debug(client))
 client.add_cog(Exp(client))
 if config.do_reddit:
     client.add_cog(Memes(client, reddit))
 
+# Run bot
 client.run(config.discord_secret)
