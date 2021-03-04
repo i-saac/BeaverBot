@@ -4,11 +4,15 @@ import discord
 import sqlite3
 import asyncio
 import time
+import json
 from discord.utils import get
 from discord.ext import commands
 from asyncprawcore.exceptions import RequestException, ServerError
 from random import choice
+from os import path
 import config
+
+global CONFIG_DATA
 
 # Allow for bot to get members by id in order to assign roles
 intents = discord.Intents.default()
@@ -18,10 +22,9 @@ intents.members = True
 client = commands.Bot(command_prefix=config.command_prefix, intents=intents)
 
 # Initialize reddit instance
-if config.do_reddit:
-    reddit = asyncpraw.Reddit(client_id=config.reddit_client,
-                              client_secret=config.reddit_secret,
-                              user_agent=config.reddit_user_agent)
+reddit = asyncpraw.Reddit(client_id=config.reddit_client,
+                          client_secret=config.reddit_secret,
+                          user_agent=config.reddit_user_agent)
 
 # Initialize sql connection and cursor
 conn = sqlite3.connect('botdata.db')
@@ -66,9 +69,16 @@ def get_lasttime(guild_id, user_id):
 
 # Subreddit uplink task
 async def subs_uplink():
-    guilds = [get(client.guilds, id=guild_id) for guild_id in config.uplink_guild_ids]
-    channels = [get(guild.text_channels, name=config.uplink_channel_name) for guild in guilds]
+    global CONFIG_DATA
+    
     while True:
+        guilds = []
+        channels = []
+        for guild in client.guilds:
+            if CONFIG_DATA[str(guild.id)]['cfg']['enable_uplink']:
+                guilds.append(guild)
+                channel = get(guild.text_channels, name=CONFIG_DATA[str(guild.id)]['cfg']['uplink_channel_name'])
+                channels.append(channel)
         try:
             subreddits = await reddit.subreddit('+'.join(config.uplink_subreddits))
             async for submission in subreddits.stream.submissions(skip_existing=True):
@@ -76,8 +86,9 @@ async def subs_uplink():
                     try:
                         await channel.send(f'New post from reddit, go check it out! {submission.url}')
                     except AttributeError:
-                        await guilds[index].create_text_channel(config.uplink_channel_name)
-                        channels[index] = get(guilds[index].text_channels, name=config.uplink_channel_name)
+                        await guilds[index].create_text_channel(CONFIG_DATA[str(guild.id)]['cfg']['uplink_channel_name'])
+                        channels[index] = get(guilds[index].text_channels,
+                                              name=CONFIG_DATA[str(guild.id)]['cfg']['uplink_channel_name'])
                         await channels[index].send(f'New post from reddit, go check it out! {submission.url}')
         except (asyncio.TimeoutError, RequestException, ServerError):
             continue
@@ -86,30 +97,53 @@ async def subs_uplink():
 # Things to do when the bot comes online
 @client.event
 async def on_ready():
+    global CONFIG_DATA
+    
+    CONFIG_DATA = dict()
+    if path.isfile('configurations.json'):
+        with open('configurations.json') as f:
+                CONFIG_DATA = json.load(f)
+        for guild in client.guilds:
+            if str(guild.id) in CONFIG_DATA:
+                CONFIG_DATA[str(guild.id)]['info'] = {'guild_name': guild.name}
+            else:
+                CONFIG_DATA[str(guild.id)] = dict()
+                CONFIG_DATA[str(guild.id)]['info'] = {'guild_name': guild.name}
+                with open('default.json') as f:
+                    CONFIG_DATA[str(guild.id)]['cfg'] = json.load(f)
+    else:
+        for guild in client.guilds:
+            CONFIG_DATA[str(guild.id)] = dict()
+            CONFIG_DATA[str(guild.id)]['info'] = {'guild_name': guild.name}
+            with open('default.json') as f:
+                CONFIG_DATA[str(guild.id)]['cfg'] = json.load(f)
+    
+    with open('configurations.json', 'w') as f:
+                json.dump(CONFIG_DATA, f, indent=2)
+    
     await client.change_presence(activity=discord.Activity(type=config.status,
                                                            name=config.status_message))
     print('Bot Active')
-    if config.do_reddit and config.do_reddit_uplink:
-        client.loop.create_task(subs_uplink())
-        print('Subreddit Uplink Established')
+    client.loop.create_task(subs_uplink())
+    print('Subreddit Uplink Established')
 
 
 # Things to do whenever there is a message
 @client.event
 async def on_message(message):
+    global CONFIG_DATA
+    
     if not message.author.bot:
         message_text = message.content.lower()
         
-        if message.guild.id in config.faq_guild_ids:
-            for key in config.faq:
-                if re.match(key, message_text):
-                    faq_response_message = config.faq[key]
-                    await message.channel.send(faq_response_message)
+        for key in CONFIG_DATA[str(message.guild.id)]['cfg']['faq']:
+            if re.match(key, message_text):
+                faq_response_message = CONFIG_DATA[str(message.guild.id)]['cfg']['faq'][key]
+                await message.channel.send(faq_response_message)
         
-        triggers = config.auto_responses.keys()
-        for trigger in triggers:
+        for trigger in CONFIG_DATA[str(message.guild.id)]['cfg']['auto_responses']:
             if trigger in message_text:
-                message_choice = choice(config.auto_responses[trigger])
+                message_choice = choice(CONFIG_DATA[str(message.guild.id)]['cfg']['auto_responses'][trigger])
                 await message.channel.send(message_choice)
         
         with conn:
@@ -126,10 +160,12 @@ async def on_message(message):
         lasttime = get_lasttime(message.guild.id, message.author.id)
         
         xp_gained = message_text.count(' ')
+        xp_cooldown = CONFIG_DATA[str(message.guild.id)]['cfg']['xp_cooldown']
+        xp_cap = CONFIG_DATA[str(message.guild.id)]['cfg']['max_xp_per_message']
         
-        if ((time.time() - lasttime) > config.xp_cooldown) and (xp_gained > 0):
-            if xp_gained > config.max_xp_per_message:
-                xp_gained = config.max_xp_per_message
+        if ((time.time() - lasttime) > xp_cooldown) and (xp_gained > 0):
+            if xp_gained > xp_cap:
+                xp_gained = xp_cap
                 
             new_xp = xp + xp_gained
             if new_xp >= 5 * (old_level ** 2) + 1:
@@ -137,25 +173,17 @@ async def on_message(message):
             else:
                 new_level = old_level
             
-            if new_level in config.levels_to_ping_user:
-                bot_channel = get(message.guild.text_channels, name=config.bot_messages_channel_name)
+            if new_level in CONFIG_DATA[str(message.guild.id)]['cfg']['levels_to_ping_user']:
+                bot_channel = get(message.guild.text_channels,
+                                  name=CONFIG_DATA[str(message.guild.id)]['cfg']['bot_messages_channel_name'])
                 if new_level != old_level:
                     try:
                         await bot_channel.send(f'{message.author.mention} Has Reached Level {new_level}!')
                     except AttributeError:
                         await message.guild.create_text_channel(config.bot_messages_channel_name)
-                        bot_channel = get(message.guild.text_channels, name=config.bot_messages_channel_name)
+                        bot_channel = get(message.guild.text_channels,
+                                          name=CONFIG_DATA[str(message.guild.id)]['cfg']['bot_messages_channel_name'])
                         await bot_channel.send(f'{message.author.mention} Has Reached Level {new_level}!')
-            
-            if new_level in config.levels_to_ping_everyone:
-                bot_channel = get(message.guild.text_channels, name=config.bot_messages_channel_name)
-                if new_level != old_level:
-                    try:
-                        await bot_channel.send(f'@everyone {message.author.mention} Has Reached Level {new_level}!')
-                    except AttributeError:
-                        await message.guild.create_text_channel(config.bot_messages_channel_name)
-                        bot_channel = get(message.guild.text_channels, name=config.bot_messages_channel_name)
-                        await bot_channel.send(f'@everyone {message.author.mention} Has Reached Level {new_level}!')
             
             with conn:
                 cursor.execute("DELETE FROM experiencelevels WHERE guildid=:guildid AND userid=:userid",
@@ -164,13 +192,15 @@ async def on_message(message):
                 cursor.execute("INSERT INTO experiencelevels VALUES (:guildid, :userid, :newlevel, :newexp, :newlasttime)",
                                {'guildid': message.guild.id, 'userid': message.author.id,
                                 'newlevel': new_level, 'newexp': new_xp, 'newlasttime': int(time.time())})
-
-            if new_level in config.levels_with_roles:
-                role = get(message.guild.roles, name=f"Level {new_level}")
-                if role is None:
-                    await message.guild.create_role(name=f"Level {new_level}")
-                    role = get(message.guild.roles, name=f"Level {new_level}")
-                await message.author.add_roles(role)
+            
+            for index, role_level in enumerate(CONFIG_DATA[str(message.guild.id)]['cfg']['levels_with_roles']):
+                if new_level == role_level:
+                    role_name = CONFIG_DATA[str(message.guild.id)]['cfg']['levels_with_roles'][index]
+                    role = get(message.guild.roles, name=role_name)
+                    if role is None:
+                        await message.guild.create_role(name=role_name)
+                        role = get(message.guild.roles, name=role_name)
+                    await message.author.add_roles(role)
 
         await client.process_commands(message)
 
@@ -267,29 +297,25 @@ class Memes(commands.Cog):
     async def doit(self, ctx):
         """Summon A Prequel Meme from r/PrequelMemes"""
         
-        if config.do_reddit:
-            subreddit = await self.reddit.subreddit('prequelmemes')
-            posts = subreddit.hot(limit=50)
-            post_info = []
-            async for post in posts:
-                url = post.url
-                title = post.title
-                author = post.author
-                if url.endswith(('.jpg', '.png', '.gif', '.jpeg')):
-                    post_info.append((title, url, author))
-            random_choice = choice(post_info)
-            post_title, image_url, post_author = random_choice
-            await ctx.send(f'{post_title} (Credit to u/{post_author})')
-            await ctx.send(image_url)
-        else:
-            await ctx.send('I\'m sorry, reddit integration seems to be disabled. Please contact your bot operator.')
+        subreddit = await self.reddit.subreddit('prequelmemes')
+        posts = subreddit.hot(limit=50)
+        post_info = []
+        async for post in posts:
+            url = post.url
+            title = post.title
+            author = post.author
+            if url.endswith(('.jpg', '.png', '.gif', '.jpeg')):
+                post_info.append((title, url, author))
+        random_choice = choice(post_info)
+        post_title, image_url, post_author = random_choice
+        await ctx.send(f'{post_title} (Credit to u/{post_author})')
+        await ctx.send(image_url)
 
 
 # Enable cogs
 client.add_cog(Debug(client))
 client.add_cog(Exp(client))
-if config.do_reddit:
-    client.add_cog(Memes(client, reddit))
+client.add_cog(Memes(client, reddit))
 
 # Run bot
 client.run(config.discord_secret)

@@ -1,0 +1,41 @@
+{
+  "auto_responses": {
+    "good bot": [
+      "*wags tail*",
+      "*slaps tail aggressively against water*"
+    ],
+    "bad bot": [
+      ":eye::lips::eye:"
+    ],
+    "status report": [
+      "No ducks have breached the hold!"
+    ],
+    "quack": [
+      "Buoyant turkeys are on the offensive!",
+      "FTD.",
+      "We don't allow fowl creatures such as yourself here.",
+      "Stop it. Go back to Eugene."
+    ]
+  },
+  "faq": {},
+  "enable_uplink": false,
+  "uplink_channel_name": "",
+  "xp_cooldown": 10,
+  "max_xp_per_message": 25,
+  "levels_with_roles": [
+    5,
+    10,
+    20
+  ],
+  "level_role_names": [
+    "Level 5",
+    "Level 10",
+    "Level 20"
+  ],
+  "bot_messages_channel_name": "bot-messages",
+  "levels_to_ping_user": [
+    5,
+    10,
+    20
+  ]
+}
