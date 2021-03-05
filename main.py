@@ -86,9 +86,9 @@ async def subs_uplink():
                     try:
                         await channel.send(f'New post from reddit, go check it out! {submission.url}')
                     except AttributeError:
-                        await guilds[index].create_text_channel(CONFIG_DATA[str(guild.id)]['cfg']['uplink_channel_name'])
+                        await guilds[index].create_text_channel(CONFIG_DATA[str(guilds[index].id)]['cfg']['uplink_channel_name'])
                         channels[index] = get(guilds[index].text_channels,
-                                              name=CONFIG_DATA[str(guild.id)]['cfg']['uplink_channel_name'])
+                                              name=CONFIG_DATA[str(guilds[index].id)]['cfg']['uplink_channel_name'])
                         await channels[index].send(f'New post from reddit, go check it out! {submission.url}')
         except (asyncio.TimeoutError, RequestException, ServerError):
             continue
@@ -194,8 +194,8 @@ async def on_message(message):
                                 'newlevel': new_level, 'newexp': new_xp, 'newlasttime': int(time.time())})
             
             for index, role_level in enumerate(CONFIG_DATA[str(message.guild.id)]['cfg']['levels_with_roles']):
-                if new_level == role_level:
-                    role_name = CONFIG_DATA[str(message.guild.id)]['cfg']['levels_with_roles'][index]
+                if new_level >= role_level:
+                    role_name = CONFIG_DATA[str(message.guild.id)]['cfg']['level_role_names'][index]
                     role = get(message.guild.roles, name=role_name)
                     if role is None:
                         await message.guild.create_role(name=role_name)
