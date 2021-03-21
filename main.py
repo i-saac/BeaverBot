@@ -12,8 +12,6 @@ from random import choice
 from os import path
 import config
 
-global CONFIG_DATA
-
 # Allow for bot to get members by id in order to assign roles
 intents = discord.Intents.default()
 intents.members = True
@@ -128,6 +126,20 @@ async def on_ready():
     print('Subreddit Uplink Established')
 
 
+# Things to do when a guild is joined
+@client.event
+async def on_guild_join(guild):
+    global CONFIG_DATA
+    
+    CONFIG_DATA[str(guild.id)] = dict()
+    CONFIG_DATA[str(guild.id)]['info'] = {'guild_name': guild.name}
+    with open('default.json') as f:
+        CONFIG_DATA[str(guild.id)]['cfg'] = json.load(f)
+    
+    with open('configurations.json', 'w') as f:
+        json.dump(CONFIG_DATA, f, indent=2)
+
+
 # Things to do whenever there is a message
 @client.event
 async def on_message(message):
@@ -137,7 +149,7 @@ async def on_message(message):
         message_text = message.content.lower()
         
         for key in CONFIG_DATA[str(message.guild.id)]['cfg']['faq']:
-            if re.match(key, message_text):
+            if re.search(key, message_text):
                 faq_response_message = CONFIG_DATA[str(message.guild.id)]['cfg']['faq'][key]
                 await message.channel.send(faq_response_message)
         
@@ -212,9 +224,45 @@ async def on_command_error(ctx, error):
         await ctx.send(f'This command is currently on cooldown. Please try again in {error.retry_after} seconds.')
     elif isinstance(error, commands.CommandNotFound):
         await ctx.send('I\'m sorry, I don\'t know that command. Try $help for a list of commands.')
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send('I\'m sorry, you seem to be missing permissions for this command.')
     else:
         raise error
     
+
+@client.command()
+@commands.has_permissions(administrator=True)
+async def changecooldown(ctx, new_cooldown):
+    """Admin Only: Changes Experience Cooldown"""
+    
+    global CONFIG_DATA
+    
+    try:
+        CONFIG_DATA[str(ctx.guild.id)]['cfg']['xp_cooldown'] = int(new_cooldown)
+        with open('configurations.json', 'w') as f:
+            json.dump(CONFIG_DATA, f, indent=2)
+            
+        await ctx.send(f'Experience Cooldown Changed to {new_cooldown} seconds')
+    except ValueError:
+        await ctx.send('Error: Please Enter a Valid Integer')
+
+
+@client.command()
+@commands.has_permissions(administrator=True)
+async def changemaxxp(ctx, new_max_xp):
+    """Admin Only: Changes Maximum Experience Per Message"""
+    
+    global CONFIG_DATA
+    
+    try:
+        CONFIG_DATA[str(ctx.guild.id)]['cfg']['max_xp_per_message'] = int(new_max_xp)
+        with open('configurations.json', 'w') as f:
+            json.dump(CONFIG_DATA, f, indent=2)
+            
+        await ctx.send(f'Maximum Message Experience Changed to {new_max_xp} exp')
+    except ValueError:
+        await ctx.send('Error: Please Enter a Valid Integer')
+
 
 # Debug cog
 class Debug(commands.Cog):
