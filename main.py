@@ -226,6 +226,8 @@ async def on_command_error(ctx, error):
         await ctx.send('I\'m sorry, I don\'t know that command. Try $help for a list of commands.')
     elif isinstance(error, commands.MissingPermissions):
         await ctx.send('I\'m sorry, you seem to be missing permissions for this command.')
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send('I\'m sorry, you seem to be missing an argument for this command.')
     else:
         raise error
     
@@ -262,6 +264,55 @@ async def changemaxxp(ctx, new_max_xp):
         await ctx.send(f'Maximum Message Experience Changed to {new_max_xp} exp')
     except ValueError:
         await ctx.send('Error: Please Enter a Valid Integer')
+
+
+@client.command()
+@commands.has_permissions(administrator=True)
+async def listautoresponses(ctx):
+    """Admin Only: Lists All Auto-Responses"""
+    
+    global CONFIG_DATA
+    
+    await ctx.send(json.dumps(CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'], indent=2))
+
+
+@client.command()
+@commands.has_permissions(administrator=True)
+async def addautoresponse(ctx, new_trigger, new_response):
+    """Admin Only: Add New Auto-Response"""
+    
+    global CONFIG_DATA
+    
+    if new_trigger in CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses']:
+        CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'][new_trigger.lower()].append(new_response)
+    else:
+        CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'][new_trigger.lower()] = [new_response]
+    
+    with open('configurations.json', 'w') as f:
+        json.dump(CONFIG_DATA, f, indent=2)
+    
+    await ctx.send(f'Added Response "{new_response}" for phrase "{new_trigger}"')
+        
+        
+@client.command()
+@commands.has_permissions(administrator=True)
+async def delautoresponse(ctx, del_trigger, del_response):
+    """Admin Only: Delete Auto-Response"""
+    
+    global CONFIG_DATA
+    
+    if del_trigger in CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses']:
+        if del_response in CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'][del_trigger]:
+            CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'][del_trigger].remove(del_response)
+            
+            with open('configurations.json', 'w') as f:
+                json.dump(CONFIG_DATA, f, indent=2)
+                
+            await ctx.send(f'Removed Response "{del_response}" for phrase "{del_trigger}"')
+        else:
+            await ctx.send('Error: Please Enter a Current Response for the Entered Trigger (Case Sensitive)')
+    else:
+        await ctx.send('Error: Please Enter a Current Trigger Phrase (Case Sensitive)')
 
 
 # Debug cog
