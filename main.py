@@ -117,7 +117,7 @@ async def on_ready():
                 CONFIG_DATA[str(guild.id)]['cfg'] = json.load(f)
     
     with open('configurations.json', 'w') as f:
-                json.dump(CONFIG_DATA, f, indent=2)
+        json.dump(CONFIG_DATA, f, indent=2)
     
     await client.change_presence(activity=discord.Activity(type=config.status,
                                                            name=config.status_message))
@@ -192,7 +192,8 @@ async def on_message(message):
                     try:
                         await bot_channel.send(f'{message.author.mention} Has Reached Level {new_level}!')
                     except AttributeError:
-                        await message.guild.create_text_channel(config.bot_messages_channel_name)
+                        bot_channel_name = CONFIG_DATA[str(message.guild.id)]['cfg']['bot_messages_channel_name']
+                        await message.guild.create_text_channel(channel_name)
                         bot_channel = get(message.guild.text_channels,
                                           name=CONFIG_DATA[str(message.guild.id)]['cfg']['bot_messages_channel_name'])
                         await bot_channel.send(f'{message.author.mention} Has Reached Level {new_level}!')
@@ -303,7 +304,10 @@ async def delautoresponse(ctx, del_trigger, del_response):
     
     if del_trigger in CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses']:
         if del_response in CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'][del_trigger]:
-            CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'][del_trigger].remove(del_response)
+            if len(CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'][del_trigger]) > 1:
+                CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'][del_trigger].remove(del_response)
+            else:
+                del CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_responses'][del_trigger]
             
             with open('configurations.json', 'w') as f:
                 json.dump(CONFIG_DATA, f, indent=2)
@@ -313,6 +317,39 @@ async def delautoresponse(ctx, del_trigger, del_response):
             await ctx.send('Error: Please Enter a Current Response for the Entered Trigger (Case Sensitive)')
     else:
         await ctx.send('Error: Please Enter a Current Trigger Phrase (Case Sensitive)')
+
+
+@client.command()
+@commands.has_permissions(administrator=True)
+async def setautodm(ctx, new_message):
+    """Admin Only: Configures Automatic DM"""
+    
+    global CONFIG_DATA
+    
+    CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_dm_message'] = new_message
+    
+    with open('configurations.json', 'w') as f:
+        json.dump(CONFIG_DATA, f, indent=2)
+        
+    await ctx.send(f'Set Automatic DM to "{new_message}"')
+
+
+@client.command()
+@commands.has_permissions(administrator=True)
+async def autodm(ctx):
+    """Admin Only: Automatically DM's Mentioned Users"""
+    
+    global CONFIG_DATA
+    
+    dm_message = CONFIG_DATA[str(ctx.guild.id)]['cfg']['auto_dm_message']
+    
+    if dm_message:
+        for mention in ctx.message.mentions:
+            await mention.send(dm_message)
+        await ctx.send('Done!')
+    else:
+        await ctx.send('I\'m sorry, your automatic DM has not been configured.')
+    await ctx.message.delete()
 
 
 # Debug cog
