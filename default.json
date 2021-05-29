@@ -22,6 +22,7 @@
   "uplink_channel_name": "",
   "xp_cooldown": 10,
   "max_xp_per_message": 25,
+  "private_channels": {},
   "levels_with_roles": [
     5,
     10,

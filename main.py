@@ -193,7 +193,7 @@ async def on_message(message):
                         await bot_channel.send(f'{message.author.mention} Has Reached Level {new_level}!')
                     except AttributeError:
                         bot_channel_name = CONFIG_DATA[str(message.guild.id)]['cfg']['bot_messages_channel_name']
-                        await message.guild.create_text_channel(channel_name)
+                        await message.guild.create_text_channel(bot_channel_name)
                         bot_channel = get(message.guild.text_channels,
                                           name=CONFIG_DATA[str(message.guild.id)]['cfg']['bot_messages_channel_name'])
                         await bot_channel.send(f'{message.author.mention} Has Reached Level {new_level}!')
@@ -231,7 +231,105 @@ async def on_command_error(ctx, error):
         await ctx.send('I\'m sorry, you seem to be missing an argument for this command.')
     else:
         raise error
+
+
+@client.command()
+@commands.has_permissions(administrator=True)
+async def newpc(ctx, new_name):
+    """Admin Only: Add New Private Channel"""
     
+    global CONFIG_DATA
+    
+    if new_name.lower() not in CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels']:
+        role = await ctx.guild.create_role(name=new_name)
+        role_id = role.id
+        
+        overwrites = {
+            ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            role: discord.PermissionOverwrite(read_messages=True)
+        }
+        await ctx.guild.create_text_channel(new_name.lower(), overwrites=overwrites)
+        
+        CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels'][new_name.lower()] = role_id
+        with open('configurations.json', 'w') as f:
+            json.dump(CONFIG_DATA, f, indent=2)
+            
+        await ctx.send(f'Channel {new_name} Created')
+    else:
+        await ctx.send('Error: Channel Already Exists')
+    
+
+@client.command()
+@commands.has_permissions(administrator=True)
+async def delpc(ctx, channel):
+    """Admin Only: Delete Private Channel"""
+    
+    global CONFIG_DATA
+    
+    if channel.lower() in CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels']:
+        del_role_id = CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels'][channel.lower()]
+        del_role = get(ctx.guild.roles, id=del_role_id)
+        try:
+            await del_role.delete()
+        except AttributeError:
+            pass
+        del_channel = get(ctx.guild.text_channels, name=channel.lower())
+        try:
+            await del_channel.delete()
+        except AttributeError:
+            pass
+        del CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels'][channel.lower()]
+        with open('configurations.json', 'w') as f:
+            json.dump(CONFIG_DATA, f, indent=2)
+        await ctx.send(f'Channel {channel} Deleted')
+    else:
+        await ctx.send('Error: Channel Does Not Exist')
+
+
+@client.command()
+async def channels(ctx):
+    """Admin Only: List Private Channels"""
+    
+    global CONFIG_DATA
+    
+    channel_list = []
+    for key in CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels']:
+        channel_list.append(key)
+        
+    send_string = ', '.join(sorted(channel_list))
+    
+    await ctx.send(f'```{send_string}```')
+
+
+@client.command()
+async def addchannel(ctx, role_name):
+    """Request Access to Channel"""
+    
+    global CONFIG_DATA
+    
+    if role_name.lower() in CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels']:
+        role_id = CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels'][role_name.lower()]
+        role = get(ctx.guild.roles, id=role_id)
+        await ctx.author.add_roles(role)
+        await ctx.send(f'Role {role_name} added for {ctx.author.mention}')
+    else:
+        await ctx.send('Error: Role Not Found')
+
+
+@client.command()
+async def removechannel(ctx, role_name):
+    """Remove Access to Channel"""
+    
+    global CONFIG_DATA
+    
+    if role_name.lower() in CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels']:
+        role_id = CONFIG_DATA[str(ctx.guild.id)]['cfg']['private_channels'][role_name.lower()]
+        role = get(ctx.guild.roles, id=role_id)
+        await ctx.author.remove_roles(role)
+        await ctx.send(f'Role {role_name} removed for {ctx.author.mention}')
+    else:
+        await ctx.send('Error: Role Not Found')
+
 
 @client.command()
 @commands.has_permissions(administrator=True)
